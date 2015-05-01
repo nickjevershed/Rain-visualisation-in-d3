@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" type="text/css" href="css/jquery-ui-1.10.3.custom.min.css" />
+<style type="text/css">
+	
+	html {
+		font-size:100%;
+	}
+
+	body {
+	  margin:0px;
+	  padding:0px;
+	  font-size:1rem;
+	}
+
+	.row:after {
+	   content: " ";
+	   visibility: hidden;
+	   display: block;
+	   height: 0;
+	   clear: both;
+	}
+
+	.stormBlock {
+		background:#F2F2F2;
+		margin-right:10px;
+		margin-bottom:10px;
+		float:left;
+		position:relative;
+		cursor: pointer;
+		width:200px;
+	}
+
+	.slider {
+		width: 150px;
+		margin-left:10px;
+		margin-bottom: 10px;
+		display: inline-block;
+		margin-top: 10px;
+	}
+
+
+</style>
+</head>
+<body>
+<div id="outer-wrapper">
+	<div id="graphic-container" class="row">
+
+	</div>
+		
+</div>
+<script type="text/javascript" src="js/jquery-1.11.1.min.js"></script>
+<script type="text/javascript" src="js/d3.min.js"></script>
+<script type="text/javascript" src="js/jquery-ui-1.10.3.custom.min.js"></script>
+<script type="text/javascript" src="js/jquery.ui.touch-punch.min.js"></script>
+<script>
+
+
+var width = 200;
+var height = 200;
+var graphic;
+var dropsPerSec = 1;
+var windStrength = 0;
+var windFactor;
+var gustiness = 0;
+var dropMax = 2;
+var rotCoords = {};
+var gustInProgress = false;
+var timerVal = false;
+var windScale = d3.scale.log()
+    			.range([1, 90]);
+var rainScale = d3.scale.linear()
+    			.range([1, 40]);
+var dropScale = d3.scale.linear()
+    			.range([1.5, 2.5]);
+var gustScale = d3.scale.linear()
+    			.range([1, 100]);     			
+
+
+windScale.domain([1,285]);
+gustScale.domain([1,285]);
+rainScale.domain([1,250]);
+dropScale.domain([1,250]);
+
+var container = d3.select("#graphic-container");
+
+container
+	.append("div")
+	.attr("class", "row");
+
+stormContainer = container		
+	.append("div")
+	.attr("id", "customCanvas")
+	.attr("class", "stormBlock")
+
+stormContainer
+	.append("div")
+	.attr("class","stormBlockOverlay");		
+
+stormContainer	
+	.append("canvas")
+	  .attr("width", width)
+	  .attr("height", height)
+	  .attr("id", "customCanvas-canvas")
+
+container
+	.append("div")
+	.attr("class","description")
+	.html("<div><span class='highlight'>Rain: </span><span id='custRain'>1</span>mm</div>" 
+			+ "<div id='rainSlider' class='slider'></div>" 
+			+ "<div><span class='highlight'>Wind speed: </span><span id='custWind'>1</span>km/hr</div>"
+			+ "<div id='windSlider' class='slider'></div>" 
+			+ "<p>Use the sliders to visualise any other weather event using total rainfall over 24 hours and maximum wind speed.</p>");	  
+
+
+var context = d3.select("#customCanvas-canvas").node().getContext("2d");	
+var detachedContainer = document.createElement("custom");
+var dataContainer = d3.select(detachedContainer);
+
+function rotation(wind) {
+
+	//Get starting xy 
+	var radians1 = (wind + 227) * Math.PI / 180;
+	var radians2 = (wind + 227 + 180) * Math.PI / 180;
+	var radius = width;
+	centerX = width/2;
+	centerY = height/2;
+	var x1 = centerX + radius * Math.cos(radians1);
+	var y1 = centerY + radius * Math.sin(radians1);
+
+	var x2 = centerX + radius * Math.cos(radians1 + 1.5);
+	var y2 = centerY + radius * Math.sin(radians1 + 1.5);
+
+	var x3 = centerX + radius * Math.cos(radians2 + 1.5);
+	var y3 = centerY + radius * Math.sin(radians2 + 1.5);
+
+	var x4 = centerX + radius * Math.cos(radians2);
+	var y4 = centerY + radius * Math.sin(radians2);
+
+	rotCoords = {"x1": x1, "y1":y1, "x2":x2,"y2":y2,"x3":x3,"y3":y3,"x4":x4,"y4":y4};
+
+}
+
+function makeGust() {
+	
+	if (gustInProgress == false) {
+	
+			gustInProgress = true;
+			d3.transition()
+			      .duration(500)
+			      .ease("linear")
+			      .tween("myVar", function() {
+			        var i = d3.interpolate(0, windStrength);
+			        return function(t) { rotation(i(t)); };
+			      
+					})
+			      .each("end", function() {
+			      	setTimeout(function(){ 
+			      		d3.transition()
+					      .duration(500)
+					      .ease("linear")
+					      .tween("myVar", function() {
+					        var i = d3.interpolate(windStrength, 0);
+					        return function(t) { rotation(i(t)); };
+					      
+							})
+					      .each("end", function() {
+					      	gustInProgress = false;
+					      })
+
+					  }, windStrength*100);
+			      	
+					})
+		
+
+	}
+	
+}
+
+
+function makeRain() { 
+
+	if (gustiness >= Math.random()*2000) {
+		makeGust();
+	}
+	for (var i = 0; i < dropsPerSec; i++) {
+		
+		rand = Math.random()
+		wiggle = Math.random() * 200;
+		wiggle *= Math.floor(Math.random()*2) == 1 ? 1 : -1;
+
+		startX = (rotCoords.x1 + (rotCoords.x2 - rotCoords.x1) * rand);
+		startY = (rotCoords.y1 + (rotCoords.y2 - rotCoords.y1) * rand);
+
+		endX = (rotCoords.x3 + (rotCoords.x4 - rotCoords.x3) * rand);
+		endY = (rotCoords.y3 + (rotCoords.y4 - rotCoords.y3) * rand); 
+
+		windFactor = (1 - windStrength/90*0.2);
+
+		dataContainer.append("custom")
+		    .attr("x", startX)
+		    .attr("y", startY)
+		    .classed("arc", true)
+	    .transition()
+		    .duration((1000 + wiggle) * (1 - windStrength/90*0.2))
+		    .ease("cubic-in")
+			.attr("x", endX)
+		    .attr("y", endY)		
+		    .remove();
+	};
+
+}
+
+function drawCanvas() {
+
+	makeRain();
+	context.fillStyle = "#F2F2F2";
+	context.rect(0,0,width,height);
+	context.fill();
+
+	var elements = dataContainer.selectAll("custom.arc");
+	elements.each(function(d) {
+	    var node = d3.select(this);
+	    context.beginPath();
+	    context.fillStyle = "steelblue";
+	    context.arc(node.attr("x"), node.attr("y"), Math.random() * (dropMax - 0.5) + 0.5, 0, 2 * Math.PI);
+	    context.fill();
+	    context.closePath();
+    	
+	})
+}
+
+
+
+$("#windSlider").slider({
+    value:1,
+    min:1,
+    max:285,
+    step:1,
+    animate:true,
+    slide: function( event, ui ) {
+
+    	windStrength = windScale(ui.value);
+		gustiness = gustScale(ui.value);
+		
+     	$("#custWind").html(ui.value);
+    }
+}); 
+
+$("#rainSlider").slider({
+    value:1,
+    min:1,
+    max:250,
+    step:1,
+    animate:true,
+    slide: function( event, ui ) {
+
+    	dropsPerSec = rainScale(ui.value);
+		dropMax = dropScale(ui.value);
+
+    	$("#custRain").html(ui.value);
+     
+    }
+}); 
+
+rotation(0);
+windStrength = windScale($('#windSlider').slider("option", "value"));
+gustiness = gustScale($('#windSlider').slider("option", "value"));
+dropsPerSec = rainScale($('#rainSlider').slider("option", "value"));
+dropMax = dropScale($('#rainSlider').slider("option", "value"));
+
+
+var animationTimer = d3.timer(function () {
+	drawCanvas();
+	return timerVal;
+});
+
+animationTimer;
+
+</script>
